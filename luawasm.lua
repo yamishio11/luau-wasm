@@ -1,4 +1,36 @@
-print("LuaWASM")
+local LUAWASM_DEBUG_ON = true
+
+
+function base64_encode(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    return ((data:gsub('.', function(x) 
+        local r,b='',x:byte()
+        for i=8,1,-1 do r=r..(b%2^i-b%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+        if (#x < 6) then return '' end
+        local c=0
+        for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
+        return b:sub(c+1,c+1)
+    end)..({ '', '==', '=' })[#data%3+1])
+end
+ 
+
+function base64_decode(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    data = string.gsub(data, '[^'..b..'=]', '')
+    return (data:gsub('.', function(x)
+        if (x == '=') then return '' end
+        local r,f='',(b:find(x)-1)
+        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if (#x ~= 8) then return '' end
+        local c=0
+        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
 
 local EXTERN_FUNC   = 0x00
 local EXTERN_TABLE  = 0x01
@@ -26,11 +58,11 @@ local function debugn(...)
   if LUAWASM_DEBUG_ON then
     if debugNewLine then
       for i=1,debugIndent do
-        io.write(". ")
+        print(". ")
       end
       debugNewLine = false
     end
-    io.write(...)
+    print(...)
   end
 end
 
@@ -38,7 +70,7 @@ local function debug(...)
   if LUAWASM_DEBUG_ON then
     if debugNewLine then
       for i=1,debugIndent do
-        io.write(". ")
+        print(". ")
       end
     end
     print(...)
@@ -173,6 +205,8 @@ local instanceIndex = {}
 local instanceMt = { __index=instanceIndex }
 
 function moduleIndex:instantiate(importDefs)
+  print("Instantiating module with " .. #self.imports .. " imports")
+  print(importDefs)
   local inst = setmetatable({}, instanceMt)
 
   inst.module = self
@@ -208,13 +242,14 @@ function moduleIndex:instantiate(importDefs)
     inst.memories[m] = memoryInst
   end
 
+
   inst.tables = {}
-  for t,table in ipairs(self.tables) do
+  for t,table in ipairs(inst.tables) do
     local tableInst = {}
     for i=1,table.limits.min do
       tableInst[i] = REF_NULL
     end
-    inst.tablles[t] = tableInst
+    inst.tables[t] = tableInst
   end
 
   inst.globals = {}
@@ -694,11 +729,8 @@ end
 
 local luawasm = {}
 
-function luawasm.load(path)
-  local f = io.open(path, "rb")
-  local data = f:read("*all")
-  f:close()
-
+function luawasm.load(data)
+  data = base64_decode(data)
   local c = createCursor(data)
 
   c.expect("\0asm\1\0\0\0")
@@ -807,6 +839,8 @@ function luawasm.load(path)
         table.insert(instr, { 0x41, c.readS32() })
       elseif opcode == 0x42 then
         table.insert(instr, { 0x42, c.readS64() })
+      elseif opcode == 0x40 then --void
+        table.insert(instr, { 0x40 })
       else
         error(string.format("Unimplemented opcode: 0x%02X", opcode))
       end
@@ -1057,9 +1091,40 @@ function luawasm.load(path)
   return setmetatable(mod, moduleMt)
 end
 
-function luawasm.instantiate(path, importDefs)
-  local mod = luawasm.load(path)
+
+function luawasm.instantiate(code, importDefs)
+  local mod = luawasm.load(code)
   return mod:instantiate(importDefs)
 end
+
+
+--example for loading
+--[[
+local wasm = require(game:GetService("ReplicatedStorage").wasm)
+local code = "
+AGFzbQEAAAABCQJgAn9/AGAAAAINAQNlbnYFcHJpbnQAAAMCAQEFAwEAEQYZA38B
+QYCAwAALfwBBjYDAAAt/AEGQgMAACwcsBAZtZW1vcnkCAARtYWluAAEKX19kYXRh
+X2VuZAMBC19faGVhcF9iYXNlAwIKEgEQAEGAgMCAAEENEICAgIAACwsWAQBBgIDA
+AAsNSGVsbG8sIHdvcmxkIQBCBG5hbWUACwpoZWxsby53YXNtAQ4CAAVwcmludAEE
+bWFpbgcSAQAPX19zdGFja19wb2ludGVyCQoBAAcucm9kYXRhAD0JcHJvZHVjZXJz
+AQxwcm9jZXNzZWQtYnkBBXJ1c3RjHTEuODUuMCAoNGQ5MWRlNGU0IDIwMjUtMDIt
+MTcpAEkPdGFyZ2V0X2ZlYXR1cmVzBCsKbXVsdGl2YWx1ZSsPbXV0YWJsZS1nbG9i
+YWxzKw9yZWZlcmVuY2UtdHlwZXMrCHNpZ24tZXh0
+"
+
+local instance
+
+local importDefs = {
+  env = {
+    print = function(addr, len)
+      print(instance:loadString(addr, len))
+    end,
+  },
+}
+
+instance = wasm.instantiate(code, importDefs)
+
+instance.exports.main()
+]]--
 
 return luawasm
