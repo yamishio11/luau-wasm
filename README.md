@@ -58,15 +58,6 @@ over.
 
 * Implement all [WASM 1.0
   instructions](https://webassembly.github.io/spec/core/binary/instructions.html)
-* Create a separate project containing utilities for usage with CC: Tweaked,
-  including
-  * A program loader
-  * A shell capable of/patches to existing software to enable executing WASM
-    programs as commands
-  * A partial and/or extended implementation of
-    [WASI](https://github.com/WebAssembly/WASI/blob/main/Proposals.md)
-  * Note that the projects are intended to be separate such that the code of
-    this project contains no references to CC.
 * Look into compiling WebAssembly into Lua code. Static solutions such as
   [wasm2lua](https://github.com/SwadicalRag/wasm2lua) exist.
   * Pros of a static approach over luawasm
