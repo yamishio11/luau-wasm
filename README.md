@@ -4,11 +4,6 @@ This project is a [WebAssembly](https://webassembly.org) 1.0 runtime
 implementation in pure Lua. The project is still a work in progress, and should
 not be relied upon yet.
 
-Additionally, the project aims to be usable in [CC:
-Tweaked](https://tweaked.cc/), and therefore will ultimately not target any
-official Lua version, but rather CC: Tweaked's JLua-based (Lua 5.2-compliant)
-runtime with backported features from 5.3.
-
 ## List of implemented features
 
 * Reading of WebAssembly's type, import, function, memory, export, code and data
